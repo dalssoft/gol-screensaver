@@ -2,7 +2,7 @@
 
 Conway's Game of Life as a terminal screensaver in pure **x86-64 Linux assembly** — no libc, just syscalls.
 
-<video src="asm/gol.mp4" autoplay loop muted playsinline></video>
+<video src="https://github.com/user-attachments/assets/3680099e-46a4-404c-ad2e-acc76077ddc2" autoplay loop muted playsinline></video>
 
 Uses **braille Unicode characters** (U+2800–U+28FF) to maximize the playing field: each terminal character maps to a 2x4 cell block, giving 8x the resolution of regular text. A standard 80x24 terminal becomes a 160x96 grid. SSE2 SIMD keeps CPU usage around 1-2%.
 
