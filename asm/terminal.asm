@@ -4,27 +4,7 @@
 BITS 64
 DEFAULT REL
 
-; Syscall numbers
-%define SYS_read       0
-%define SYS_write      1
-%define SYS_poll       7
-%define SYS_ioctl      16
-%define SYS_nanosleep  35
-%define SYS_exit       60
-
-; ioctl constants
-%define TIOCGWINSZ     0x5413
-%define TCGETS         0x5401
-%define TCSETS         0x5402
-%define STDOUT         1
-%define STDIN          0
-
-; poll constants
-%define POLLIN         1
-
-; termios c_lflag bits
-%define ICANON         0x2
-%define ECHO           0x8
+%include "constants.inc"
 
 ; --- Imports ---
 extern grid_w, grid_h, char_cols, char_rows

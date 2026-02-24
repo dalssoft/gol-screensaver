@@ -4,8 +4,7 @@
 BITS 64
 DEFAULT REL
 
-%define SYS_clock_gettime  228
-%define CLOCK_MONOTONIC    1
+%include "constants.inc"
 
 extern rng_state
 

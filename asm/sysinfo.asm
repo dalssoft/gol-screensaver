@@ -5,10 +5,7 @@
 BITS 64
 DEFAULT REL
 
-%define SYS_open   2
-%define SYS_read   0
-%define SYS_close  3
-%define O_RDONLY   0
+%include "constants.inc"
 
 ; --- Imports ---
 extern char_cols, char_rows
@@ -180,7 +177,9 @@ sysinfo_update:
     mov byte [rdi + r13], 0
 
     lea rsi, [rel proc_buf]
-    call find_memtotal
+    lea rdi, [rel memtotal_tag]
+    mov ecx, 9
+    call find_memfield
     test rax, rax
     jz .ram_done
     xor edx, edx
@@ -190,7 +189,9 @@ sysinfo_update:
     mov r14d, eax
 
     lea rsi, [rel proc_buf]
-    call find_memavailable
+    lea rdi, [rel memavail_tag]
+    mov ecx, 13
+    call find_memfield
     test rax, rax
     jz .ram_done
     xor edx, edx
@@ -531,63 +532,19 @@ sysinfo_render:
     lea rcx, [rel panel_row_off]
     mov [rcx + rdx*4], eax
 
-    ; CPU: pad spaces then bar cells
-    mov ecx, [rbp-28]
-.pb_cpu_pad:
-    test ecx, ecx
-    jz .pb_cpu_bars
-    mov byte [rdi], ' '
-    inc rdi
-    dec ecx
-    jmp .pb_cpu_pad
-
-.pb_cpu_bars:
+    ; CPU bars
     lea r9, [rel cpu_colors]
-    xor ebx, ebx
-.pb_cpu_loop:
-    cmp ebx, [rbp-20]
-    jge .pb_cpu_done
-    mov eax, [rbp-24]
-    add eax, ebx
-    and eax, 127
-    lea rsi, [rel cpu_history]
-    movzx eax, byte [rsi + rax]
-    mov ecx, [rbp-104]
-    call emit_bar_cell_colored
-    inc ebx
-    jmp .pb_cpu_loop
-.pb_cpu_done:
+    lea r11, [rel cpu_history]
+    call emit_history_section
 
     ; Center gap
     mov byte [rdi], ' '
     inc rdi
 
-    ; RAM: pad spaces then bar cells
-    mov ecx, [rbp-28]
-.pb_ram_pad:
-    test ecx, ecx
-    jz .pb_ram_bars
-    mov byte [rdi], ' '
-    inc rdi
-    dec ecx
-    jmp .pb_ram_pad
-
-.pb_ram_bars:
+    ; RAM bars
     lea r9, [rel ram_colors]
-    xor ebx, ebx
-.pb_ram_loop:
-    cmp ebx, [rbp-20]
-    jge .pb_ram_done
-    mov eax, [rbp-24]
-    add eax, ebx
-    and eax, 127
-    lea rsi, [rel ram_history]
-    movzx eax, byte [rsi + rax]
-    mov ecx, [rbp-104]
-    call emit_bar_cell_colored
-    inc ebx
-    jmp .pb_ram_loop
-.pb_ram_done:
+    lea r11, [rel ram_history]
+    call emit_history_section
 
     ; Record row length
     mov edx, [rbp-104]
@@ -628,6 +585,41 @@ sysinfo_render:
     pop r12
     pop rbx
 .ret_early:
+    ret
+
+; =====================================================================
+; emit_history_section - emit padded bar chart section at [rdi]
+; Input: r9 = color table, r11 = history array ptr
+; Uses rbp-relative locals: [rbp-28]=pad, [rbp-20]=num_disp,
+;   [rbp-24]=start_idx, [rbp-104]=content_row
+; Clobbers: rax, rbx, ecx, edx, rsi, r8, r10 (via emit_bar_cell_colored)
+; =====================================================================
+emit_history_section:
+    push rbx
+    ; Pad spaces
+    mov ecx, [rbp-28]
+.ehs_pad:
+    test ecx, ecx
+    jz .ehs_bars
+    mov byte [rdi], ' '
+    inc rdi
+    dec ecx
+    jmp .ehs_pad
+.ehs_bars:
+    xor ebx, ebx
+.ehs_loop:
+    cmp ebx, [rbp-20]
+    jge .ehs_done
+    mov eax, [rbp-24]
+    add eax, ebx
+    and eax, 127
+    movzx eax, byte [r11 + rax]
+    mov ecx, [rbp-104]
+    call emit_bar_cell_colored
+    inc ebx
+    jmp .ehs_loop
+.ehs_done:
+    pop rbx
     ret
 
 ; =====================================================================
@@ -737,35 +729,14 @@ emit_bar_cell_colored:
     ; Emit color escape
     call .bcc_emit_color
 
-    ; Encode U+2800 + r8d as UTF-8
-    mov eax, 0x2800
-    or eax, r8d
-    ; Byte 1: 1110xxxx
-    mov ecx, eax
-    shr ecx, 12
-    and cl, 0x0F
-    or cl, 0xE0
-    mov [rdi], cl
-    ; Byte 2: 10xxxxxx
-    mov ecx, eax
-    shr ecx, 6
-    and cl, 0x3F
-    or cl, 0x80
-    mov [rdi+1], cl
-    ; Byte 3: 10xxxxxx
-    mov ecx, eax
-    and cl, 0x3F
-    or cl, 0x80
-    mov [rdi+2], cl
-    add rdi, 3
+    ; Encode braille as UTF-8
+    EMIT_BRAILLE r8d
     ret
 
 .bcc_empty:
     ; Empty braille (U+2800 = blank) - no color needed
-    mov byte [rdi],   0xE2
-    mov byte [rdi+1], 0xA0
-    mov byte [rdi+2], 0x80
-    add rdi, 3
+    xor r8d, r8d
+    EMIT_BRAILLE r8d
     ret
 
 ; .bcc_emit_color - emit 7-byte color escape based on r10d (value 0-100)
@@ -846,30 +817,33 @@ uint_to_str:
     ret
 
 ; =====================================================================
-; find_memtotal
+; find_memfield - find a field in /proc/meminfo and return its value
+; Input: rsi = buffer to search, rdi = tag string, ecx = tag length
+; Output: eax = parsed value (0 if not found)
 ; =====================================================================
-find_memtotal:
-    push rsi
+find_memfield:
+    push rbx
+    push r12
+    mov r12, rdi                   ; tag pointer
+    mov ebx, ecx                   ; tag length
 .scan:
     cmp byte [rsi], 0
     je .notfound
-    cmp byte [rsi], 'M'
+    ; Try matching tag at current position
+    xor ecx, ecx
+.cmp:
+    cmp ecx, ebx
+    jge .matched
+    movzx eax, byte [rsi + rcx]
+    cmp al, [r12 + rcx]
     jne .next
-    cmp byte [rsi+1], 'e'
-    jne .next
-    cmp byte [rsi+2], 'm'
-    jne .next
-    cmp byte [rsi+3], 'T'
-    jne .next
-    cmp byte [rsi+4], 'o'
-    jne .next
-    cmp byte [rsi+5], 't'
-    jne .next
-    add rsi, 9
-    jmp .skip_spaces
+    inc ecx
+    jmp .cmp
 .next:
     inc rsi
     jmp .scan
+.matched:
+    add rsi, rbx                   ; skip past tag
 .skip_spaces:
     cmp byte [rsi], ' '
     jne .parse
@@ -877,54 +851,21 @@ find_memtotal:
     jmp .skip_spaces
 .parse:
     call parse_uint
-    pop rsi
+    pop r12
+    pop rbx
     ret
 .notfound:
     xor eax, eax
-    pop rsi
-    ret
-
-; =====================================================================
-; find_memavailable
-; =====================================================================
-find_memavailable:
-    push rsi
-.scan:
-    cmp byte [rsi], 0
-    je .notfound
-    cmp byte [rsi], 'M'
-    jne .next
-    cmp byte [rsi+1], 'e'
-    jne .next
-    cmp byte [rsi+2], 'm'
-    jne .next
-    cmp byte [rsi+3], 'A'
-    jne .next
-    cmp byte [rsi+4], 'v'
-    jne .next
-    add rsi, 13
-    jmp .skip_spaces
-.next:
-    inc rsi
-    jmp .scan
-.skip_spaces:
-    cmp byte [rsi], ' '
-    jne .parse
-    inc rsi
-    jmp .skip_spaces
-.parse:
-    call parse_uint
-    pop rsi
-    ret
-.notfound:
-    xor eax, eax
-    pop rsi
+    pop r12
+    pop rbx
     ret
 
 ; --- Read-only data ---
 section .rodata
 
 no_sysinfo_str: db '--no-sysinfo', 0
+memtotal_tag:   db 'MemTotal:'
+memavail_tag:   db 'MemAvailable:'
 
 ; Bar color tables (3 entries × 7 bytes each)
 ; ESC[0;XXm resets dim attribute then sets foreground color

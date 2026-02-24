@@ -5,11 +5,8 @@
 BITS 64
 DEFAULT REL
 
-%define SYS_exit       60
-%define SYS_rt_sigaction 13
-%define SIGINT         2
-%define SIGTERM        15
-%define SCROLL_EVERY   3
+%include "constants.inc"
+
 %define RESET_EVERY    1000
 
 ; --- Imports ---

@@ -4,11 +4,10 @@
 BITS 64
 DEFAULT REL
 
-; --- Constants ---
-%define MAX_HEAT       10
+%include "constants.inc"
+
+; --- Local constants ---
 %define SLEEP_MS       150000000   ; 150ms in nanoseconds
-%define DENSITY_THRESH 52          ; ~20% of 256
-%define SCROLL_EVERY   3
 
 ; Terminal defaults (overridden at runtime via ioctl)
 %define DEFAULT_COLS   80
@@ -18,12 +17,6 @@ DEFAULT REL
 %define MAX_W          640
 %define MAX_H          400
 %define MAX_GRID       (MAX_W * MAX_H)    ; 256000
-
-; Braille base codepoint U+2800
-; UTF-8: E2 A0 80 + offset
-%define BRAILLE_BASE_B0  0xE2
-%define BRAILLE_BASE_B1  0xA0
-%define BRAILLE_BASE_B2  0x80
 
 ; --- Exported symbols ---
 global grid, grid2, heat, heat2

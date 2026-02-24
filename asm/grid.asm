@@ -5,8 +5,7 @@
 BITS 64
 DEFAULT REL
 
-%define MAX_HEAT       10
-%define DENSITY_THRESH 52
+%include "constants.inc"
 
 extern grid, grid2, heat, heat2
 extern grid_w, grid_h

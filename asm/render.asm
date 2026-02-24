@@ -5,7 +5,7 @@
 BITS 64
 DEFAULT REL
 
-%define MAX_HEAT 10
+%include "constants.inc"
 
 extern grid, heat
 extern grid_w, grid_h, char_cols, char_rows
@@ -64,9 +64,7 @@ render_frame:
     ; Emit ANSI reset at start of each line
     mov rdi, output_buf
     add rdi, [output_pos]
-    lea rsi, [ansi_reset]
-    mov ecx, ansi_reset_len
-    rep movsb
+    EMIT_ANSI_RESET
     sub rdi, output_buf
     mov [output_pos], rdi
 
@@ -98,9 +96,7 @@ render_frame:
     add rdi, [output_pos]
 
     ; Reset GoL color
-    lea rsi, [ansi_reset]
-    mov ecx, ansi_reset_len
-    rep movsb
+    EMIT_ANSI_RESET
 
     ; Set panel dim color
     lea rsi, [sysinfo_prefix]
@@ -119,9 +115,7 @@ render_frame:
     rep movsb
 
     ; Reset color after panel
-    lea rsi, [ansi_reset]
-    mov ecx, ansi_reset_len
-    rep movsb
+    EMIT_ANSI_RESET
 
     ; Update output_pos
     sub rdi, output_buf
@@ -289,9 +283,7 @@ render_frame:
     cmp ebp, -1
     je .just_space
     ; Emit reset
-    lea rsi, [ansi_reset]
-    mov ecx, ansi_reset_len
-    rep movsb
+    EMIT_ANSI_RESET
     mov ebp, -1
 .just_space:
     mov byte [rdi], ' '
@@ -323,30 +315,7 @@ render_frame:
 
     ; Encode braille as UTF-8: U+2800 + bl
     movzx edx, bl
-    add edx, 0x2800
-
-    ; Byte 1: 1110xxxx (bits 15-12)
-    mov ecx, edx
-    shr ecx, 12
-    and cl, 0x0F
-    or cl, 0xE0
-    mov byte [rdi], cl
-    inc rdi
-
-    ; Byte 2: 10xxxxxx (bits 11-6)
-    mov ecx, edx
-    shr ecx, 6
-    and cl, 0x3F
-    or cl, 0x80
-    mov byte [rdi], cl
-    inc rdi
-
-    ; Byte 3: 10xxxxxx (bits 5-0)
-    mov ecx, edx
-    and cl, 0x3F
-    or cl, 0x80
-    mov byte [rdi], cl
-    inc rdi
+    EMIT_BRAILLE edx
 
 .store_pos:
     sub rdi, output_buf
@@ -358,9 +327,7 @@ render_frame:
     ; End of line reset
     mov rdi, output_buf
     add rdi, [output_pos]
-    lea rsi, [ansi_reset]
-    mov ecx, ansi_reset_len
-    rep movsb
+    EMIT_ANSI_RESET
     ; Newline (except after last row)
     mov eax, r12d
     inc eax
@@ -387,34 +354,32 @@ render_frame:
 ; .sample_cell - read grid and heat at wrapped (row, col)
 ; edx = row (unwrapped), esi = col (unwrapped)
 ; Returns: dl = grid value, dh = heat value
-; Preserves: eax, ecx, ebx, ebp, r12-r15
-; Clobbers: edx, esi, r8d, r9d
+; Preserves: eax, ecx, ebx, ebp, r8-r15
+; Clobbers: edx, esi
+;
+; Optimization: input values are always in [0, 2*dim-2], so a single
+; conditional subtract replaces expensive div instructions.
 .sample_cell:
-    ; Wrap row: edx % H
     push rax
-    push rcx
-    mov eax, edx
-    xor edx, edx
-    mov ecx, [rsp+16+8]           ; H from stack (rsp+24 locals + 16 pushes = wrong)
-    ; Actually, H is at [rsp + offset]. Let's use the global.
-    div dword [grid_h]
-    mov r8d, edx                   ; r8d = wrapped row
 
-    ; Wrap col: esi % W
-    mov eax, esi
-    xor edx, edx
-    div dword [grid_w]
-    mov r9d, edx                   ; r9d = wrapped col
-
+    ; Wrap row: if edx >= grid_h, edx -= grid_h
+    cmp edx, [grid_h]
+    jl .row_ok
+    sub edx, [grid_h]
+.row_ok:
+    ; Wrap col: if esi >= grid_w, esi -= grid_w
+    cmp esi, [grid_w]
+    jl .col_ok
+    sub esi, [grid_w]
+.col_ok:
     ; offset = row * W + col
-    mov eax, r8d
+    mov eax, edx
     imul eax, [grid_w]
-    add eax, r9d
+    add eax, esi
 
     ; Read both values
     movzx edx, byte [grid + rax]   ; dl = grid val
     mov dh, byte [heat + rax]      ; dh = heat val
 
-    pop rcx
     pop rax
     ret
