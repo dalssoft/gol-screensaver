@@ -171,6 +171,11 @@ panel_x:         dd 0          ; 0 = panel disabled / not yet computed
 panel_y:         dd 0
 panel_w:         dd 0
 
+; Panel position toggle (top/bottom every 30s = 200 frames)
+global panel_pos_counter, panel_at_top
+panel_pos_counter: dd 0
+panel_at_top:      dd 0        ; 0 = bottom, 1 = top
+
 ; --- BSS section (uninitialized) ---
 section .bss
 

@@ -21,6 +21,7 @@ extern cpu_history, ram_history
 extern history_pos, history_count, update_counter
 extern panel_x, panel_y, panel_w
 extern panel_row_off, panel_row_len
+extern panel_pos_counter, panel_at_top
 
 ; --- Exports ---
 global sysinfo_init, sysinfo_update, sysinfo_render
@@ -303,8 +304,28 @@ sysinfo_render:
     inc ecx
     mov [rbp-8], ecx              ; box_x (1-based)
 
+    ; Toggle panel position every 400 frames (~60 seconds)
+    mov eax, [panel_pos_counter]
+    inc eax
+    cmp eax, 400
+    jl .no_toggle
+    xor eax, eax
+    xor ecx, ecx
+    cmp dword [panel_at_top], 0
+    sete cl                        ; toggle: 0→1, 1→0
+    mov [panel_at_top], ecx
+.no_toggle:
+    mov [panel_pos_counter], eax
+
+    ; box_y: top = 1, bottom = char_rows - 7
+    cmp dword [panel_at_top], 0
+    jne .pos_top
     mov eax, [char_rows]
     sub eax, 7
+    jmp .pos_done
+.pos_top:
+    mov eax, 1
+.pos_done:
     mov [rbp-12], eax             ; box_y
 
     ; Export panel geometry
