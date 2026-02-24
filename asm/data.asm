@@ -32,6 +32,17 @@ global scroll_ox, scroll_oy, generation
 global output_buf, output_pos
 global timespec_sleep
 global rng_state
+global sysinfo_enabled
+global cpu_prev_idle, cpu_prev_total
+global cpu_pct, mem_used_mb, mem_total_mb
+global proc_buf, panel_buf
+global proc_stat_path, proc_meminfo_path
+global sysinfo_prefix, sysinfo_prefix_len
+global sysinfo_suffix, sysinfo_suffix_len
+global cpu_history, ram_history
+global history_pos, history_count, update_counter
+global panel_x, panel_y, panel_w
+global panel_row_off, panel_row_len
 
 ; --- DATA section ---
 section .data
@@ -132,6 +143,34 @@ generation: dd 0
 ; RNG state
 rng_state:  dq 0
 
+; Sysinfo data
+sysinfo_enabled: dd 1
+cpu_prev_idle:   dq 0
+cpu_prev_total:  dq 0
+cpu_pct:         dd 0
+mem_used_mb:     dd 0
+mem_total_mb:    dd 0
+
+; /proc file paths
+proc_stat_path:    db '/proc/stat', 0
+proc_meminfo_path: db '/proc/meminfo', 0
+
+; Sysinfo ANSI escape: dim dark gray
+sysinfo_prefix:     db 27, '[2;90m'
+sysinfo_prefix_len: dd 7
+sysinfo_suffix:     db 27, '[0m'
+sysinfo_suffix_len: dd 4
+
+; History ring buffer state
+history_pos:     dd 0
+history_count:   dd 0
+update_counter:  dd 19          ; init to 19 so first frame triggers read
+
+; Panel geometry (set by sysinfo_render, read by render_frame)
+panel_x:         dd 0          ; 0 = panel disabled / not yet computed
+panel_y:         dd 0
+panel_w:         dd 0
+
 ; --- BSS section (uninitialized) ---
 section .bss
 
@@ -142,5 +181,12 @@ heat2:      resb MAX_GRID       ; next heat map
 
 ; Output buffer (generous: 4 bytes per braille char + escapes + newlines)
 ; Max ~320 cols * 100 lines * 20 bytes = 640000
-output_buf: resb 800000
-output_pos: resq 1              ; current write position in output_buf
+output_buf:    resb 800000
+output_pos:    resq 1              ; current write position in output_buf
+
+proc_buf:      resb 1024           ; buffer for reading /proc files
+panel_buf:     resb 4096           ; pre-built panel row data
+panel_row_off: resd 6              ; byte offset of each panel row in panel_buf
+panel_row_len: resd 6              ; byte length of each panel row
+cpu_history:   resb 128            ; ring buffer of cpu_pct values (0-100)
+ram_history:   resb 128            ; ring buffer of ram_pct values (0-100)

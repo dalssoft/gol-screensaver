@@ -20,6 +20,7 @@ extern grid_init, grid_step
 extern render_frame
 extern grid_w, grid_h
 extern scroll_ox, scroll_oy, generation
+extern sysinfo_init, sysinfo_update, sysinfo_render
 
 ; --- Exports ---
 global _start
@@ -73,6 +74,11 @@ setup_signals:
 
 ; _start - program entry point
 _start:
+    ; Save argc/argv from stack before calls clobber rsp-relative access
+    mov edi, [rsp]              ; argc
+    lea rsi, [rsp+8]           ; argv
+    call sysinfo_init
+
     ; Setup signal handlers
     call setup_signals
 
@@ -91,7 +97,13 @@ _start:
     mov dword [generation], 0
 
 .main_loop:
-    ; Render current state to output buffer
+    ; Update system info metrics
+    call sysinfo_update
+
+    ; Pre-build sysinfo panel rows (before render, for inline injection)
+    call sysinfo_render
+
+    ; Render current state to output buffer (inlines panel content)
     call render_frame
 
     ; Flush output buffer to terminal

@@ -60,6 +60,12 @@ seq_show_cursor_len equ $ - seq_show_cursor
 seq_clear: db 27, '[2J'
 seq_clear_len equ $ - seq_clear
 
+; Synchronized output (prevents flickering)
+seq_sync_start: db 27, '[?2026h'
+seq_sync_start_len equ $ - seq_sync_start
+seq_sync_end: db 27, '[?2026l'
+seq_sync_end_len equ $ - seq_sync_end
+
 section .bss
 ; winsize struct: unsigned short ws_row, ws_col, ws_xpixel, ws_ypixel
 winsize: resb 8
@@ -195,9 +201,14 @@ term_cleanup:
 
     ret
 
-; term_flush - write output_buf to stdout
+; term_flush - write output_buf to stdout with sync-end
 ; Writes from output_buf[0] to output_buf[output_pos]
 term_flush:
+    ; Append sync-end before writing
+    lea rsi, [seq_sync_end]
+    mov ecx, seq_sync_end_len
+    call buf_append
+
     mov rsi, output_buf
     mov rdx, [output_pos]
     test rdx, rdx
@@ -250,10 +261,12 @@ term_write_home:
     mov ecx, ansi_home_len
     jmp buf_append
 
-; buf_reset - reset output buffer position to 0
+; buf_reset - reset output buffer position and emit sync-start
 buf_reset:
     mov qword [output_pos], 0
-    ret
+    lea rsi, [seq_sync_start]
+    mov ecx, seq_sync_start_len
+    jmp buf_append
 
 ; buf_append - append ecx bytes from rsi to output buffer
 ; rsi = source, ecx = length

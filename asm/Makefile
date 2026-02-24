@@ -17,7 +17,7 @@ DOCKER_RUN  = docker run --rm --platform linux/amd64 \
               make _build"
 
 # Source modules
-SRCS = main.asm terminal.asm random.asm grid.asm render.asm data.asm
+SRCS = main.asm terminal.asm random.asm grid.asm render.asm sysinfo.asm data.asm
 OBJS = $(SRCS:.asm=.o)
 
 .PHONY: all build clean help _build
@@ -57,4 +57,5 @@ terminal.o: terminal.asm
 random.o:   random.asm
 grid.o:     grid.asm
 render.o:   render.asm
+sysinfo.o:  sysinfo.asm
 data.o:     data.asm

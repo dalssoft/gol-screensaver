@@ -14,6 +14,10 @@ extern heat_fg_table, heat_fg_lens
 extern ansi_reset, ansi_reset_len
 extern output_buf, output_pos
 extern ansi_home, ansi_home_len
+extern buf_reset, buf_append
+extern sysinfo_enabled, panel_x, panel_y, panel_w
+extern panel_row_off, panel_row_len, panel_buf
+extern sysinfo_prefix, sysinfo_prefix_len
 
 global render_frame
 
@@ -43,16 +47,13 @@ render_frame:
     mov eax, [scroll_ox]
     mov [rsp+12], eax              ; [rsp+12] = ox
 
-    ; Reset output buffer
-    mov qword [output_pos], 0
+    ; Reset output buffer (also emits sync-start ESC[?2026h)
+    call buf_reset
 
     ; Write cursor home sequence
-    mov rdi, output_buf
-    mov rsi, ansi_home
+    lea rsi, [ansi_home]
     mov ecx, ansi_home_len
-    rep movsb
-    sub rdi, output_buf
-    mov [output_pos], rdi
+    call buf_append
 
     xor r12d, r12d                 ; r12 = char_row
 
@@ -75,6 +76,66 @@ render_frame:
 .col_loop:
     cmp r13d, r15d
     jge .row_end
+
+    ; Inline panel injection: at first panel column, emit entire pre-built row
+    cmp dword [panel_x], 0
+    je .no_panel
+    ; Check row in range [panel_y, panel_y+5]
+    mov edx, [panel_y]
+    cmp r12d, edx
+    jl .no_panel
+    add edx, 6
+    cmp r12d, edx
+    jge .no_panel
+    ; Check col == panel_x - 1 (0-based trigger point)
+    mov edx, [panel_x]
+    dec edx
+    cmp r13d, edx
+    jne .no_panel
+
+    ; === Inject panel row inline ===
+    mov rdi, output_buf
+    add rdi, [output_pos]
+
+    ; Reset GoL color
+    lea rsi, [ansi_reset]
+    mov ecx, ansi_reset_len
+    rep movsb
+
+    ; Set panel dim color
+    lea rsi, [sysinfo_prefix]
+    mov ecx, [sysinfo_prefix_len]
+    rep movsb
+
+    ; Copy pre-built panel row data
+    mov edx, r12d
+    sub edx, [panel_y]            ; row_idx (0-5)
+    lea rax, [panel_row_off]
+    mov eax, [rax + rdx*4]        ; byte offset in panel_buf
+    lea rsi, [panel_buf]
+    add rsi, rax
+    lea rax, [panel_row_len]
+    mov ecx, [rax + rdx*4]        ; byte length
+    rep movsb
+
+    ; Reset color after panel
+    lea rsi, [ansi_reset]
+    mov ecx, ansi_reset_len
+    rep movsb
+
+    ; Update output_pos
+    sub rdi, output_buf
+    mov [output_pos], rdi
+
+    ; Reset color tracking, advance col past panel
+    mov ebp, -1
+    mov edx, [panel_x]
+    dec edx
+    add edx, [panel_w]
+    mov r13d, edx
+    jmp .col_loop
+
+.no_panel:
 
     ; Compute base_row = char_row * 4 + oy
     mov eax, r12d
