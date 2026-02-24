@@ -2,6 +2,8 @@
 
 Conway's Game of Life as a terminal screensaver in pure **x86-64 Linux assembly** — no libc, just syscalls.
 
+<video src="asm/gol.mp4" autoplay loop muted playsinline></video>
+
 Uses **braille Unicode characters** (U+2800–U+28FF) to maximize the playing field: each terminal character maps to a 2x4 cell block, giving 8x the resolution of regular text. A standard 80x24 terminal becomes a 160x96 grid. SSE2 SIMD keeps CPU usage around 1-2%.
 
 ## Features
@@ -44,7 +46,7 @@ This produces a statically linked `gol-braille` binary (~9KB).
 ./gol-braille
 ```
 
-Press `Ctrl+C` to exit. The terminal is restored automatically.
+Press any key to exit. The terminal is restored automatically. The simulation resets with a new random grid every 1000 generations.
 
 The program auto-detects terminal dimensions via `ioctl(TIOCGWINSZ)` and adapts the grid accordingly.
 
